@@ -33,3 +33,15 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 .claude/
+
+# Model weights (too large for GitHub)
+*.pt
+*.pth
+
+# Sample medical data / artifacts
+*.dicom
+*.dcm
+preview.png
+
+# Local scripts (not part of app)
+scripts/

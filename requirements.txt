@@ -6,6 +6,15 @@ pydantic-settings
 langchain-core
 langchain-openai
 langgraph
-transformers
+transformers<5
 timm
 Pillow
+pydicom
+opencv-python-headless
+numpy
+pandas
+pyyaml
+matplotlib
+scipy
+seaborn
+tqdm

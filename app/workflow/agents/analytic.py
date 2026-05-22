@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage
 
 from app.config import get_settings
 from app.workflow.state import GraphState
-from app.workflow.tools.cv_model import mock_vinbigdata_cv
+from app.workflow.tools.cv_model import vinbigdata_cv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
@@ -15,7 +15,7 @@ def run_analytic_agent(state: GraphState) -> Dict[str, object]:
 	settings = get_settings()
 	llm = ChatOpenAI(model=settings.openai_model, api_key=settings.openai_api_key)
 
-	cv_output = mock_vinbigdata_cv.invoke(state["image_path"])
+	cv_output = vinbigdata_cv.invoke(state["image_path"])
 
 	prompt = ChatPromptTemplate.from_messages(
 		[

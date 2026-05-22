@@ -6,3 +6,6 @@ pydantic-settings
 langchain-core
 langchain-openai
 langgraph
+transformers
+timm
+Pillow

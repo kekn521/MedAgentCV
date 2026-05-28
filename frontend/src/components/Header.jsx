@@ -1,4 +1,9 @@
-import { projectTitle, teamNumber, teamMembers } from "../teamConfig.js";
+import {
+  projectTitle,
+  projectSubtitle,
+  teamNumber,
+  teamMembers,
+} from "../teamConfig.js";
 
 export default function Header({ onLoadSample }) {
   return (
@@ -8,7 +13,7 @@ export default function Header({ onLoadSample }) {
           <span className="brand-mark">◢◤</span>
           <div>
             <h1 className="title">{projectTitle}</h1>
-            <p className="subtitle">MedAgentCV · Chest X-ray Diagnosis Agent</p>
+            <p className="subtitle">{projectSubtitle}</p>
           </div>
         </div>
         <div className="header-actions">

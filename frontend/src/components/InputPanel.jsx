@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-const MIN = 3;
 const MAX = 500;
 
 export default function InputPanel({ onAnalyze, loading }) {
@@ -10,8 +9,9 @@ export default function InputPanel({ onAnalyze, loading }) {
   const [touched, setTouched] = useState(false);
 
   const descLen = description.trim().length;
-  const descOk = descLen >= MIN && descLen <= MAX;
-  const canSubmit = file && descOk && !loading;
+  const descTooLong = descLen > MAX;
+  // Description is optional — the model can run on the image alone.
+  const canSubmit = file && !descTooLong && !loading;
 
   function handleFile(e) {
     const f = e.target.files?.[0] || null;
@@ -35,30 +35,30 @@ export default function InputPanel({ onAnalyze, loading }) {
         <input type="file" accept="image/*" onChange={handleFile} hidden />
         <span className="dropzone-icon">⌖</span>
         <span className="dropzone-text">
-          {fileName || "Click to select a PNG / JPG"}
+          {fileName || "Click to upload a PNG / JPG"}
         </span>
       </label>
       {touched && !file && <p className="field-error">Please select an image.</p>}
 
       <label className="field-label" htmlFor="desc">
-        Disease / symptom description
+        Disease / symptom description <span className="optional">(optional)</span>
       </label>
       <textarea
         id="desc"
         className="textarea"
         rows={4}
-        placeholder="e.g. 60yo patient, shortness of breath, suspected cardiomegaly…"
+        placeholder="Optional — e.g. 60 years old patient, shortness of breath, suspected cardiomegaly…"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
       <div className="char-row">
-        <span className={descOk ? "muted" : "field-error"}>
-          {descLen}/{MAX} (min {MIN})
+        <span className={descTooLong ? "field-error" : "muted"}>
+          {descLen}/{MAX}
         </span>
       </div>
 
       <button className="primary-btn" type="submit" disabled={!canSubmit}>
-        {loading ? "Analyzing…" : "Run Analysis ▶"}
+        {loading ? "Analyzing…" : "Run Analysis"}
       </button>
     </form>
   );

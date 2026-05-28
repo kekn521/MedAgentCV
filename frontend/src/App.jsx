@@ -7,7 +7,8 @@ import FinalAnalysis from "./components/FinalAnalysis.jsx";
 import FindingsList from "./components/FindingsList.jsx";
 import AgentTimeline from "./components/AgentTimeline.jsx";
 import RawJson from "./components/RawJson.jsx";
-import FollowUpBar from "./components/FollowUpBar.jsx";
+// FollowUpBar (multi-turn) is hidden until the backend supports sessions.
+// import FollowUpBar from "./components/FollowUpBar.jsx";
 import { mockResult, mockImageUrl } from "./mockResult.js";
 
 // status: "idle" | "loading" | "success" | "error"
@@ -123,8 +124,6 @@ export default function App() {
           )}
         </section>
       </main>
-
-      <FollowUpBar />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // Team / project metadata shown in the header.
-// Replace `projectTitle` once the team finalizes it.
-export const projectTitle = "title";
+export const projectTitle = "MedAgentCV";
+export const projectSubtitle = "Chest X-ray Diagnosis Agent";
 export const teamNumber = 12;
 
 export const teamMembers = [

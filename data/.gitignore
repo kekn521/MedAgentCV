@@ -1,0 +1,5 @@
+# Staging clone of the HF source dataset (reproducible via README)
+_staging/
+
+# Downloaded chest X-ray PNGs (large; re-fetch with prepare_dataset.py)
+vinbig/images/

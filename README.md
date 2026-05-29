@@ -53,4 +53,36 @@ docker compose up --build
 ### API usage
 POST `/api/v1/analyze` (multipart/form-data):
 - `image`: image file
-- `disease_description`: text
+- `disease_description`: text (optional)
+
+## Frontend setup
+
+The frontend is a React + Vite single-page app in `frontend/` that lets you
+upload a chest X-ray, run the agent, and view the input/output (detection boxes,
+final analysis, and the internal analytic ↔ verify dialogue).
+
+### 1) Install dependencies
+```bash
+cd frontend
+npm install
+```
+
+### 2) Run the dev server
+```bash
+npm run dev
+```
+
+The app will be available at: http://localhost:5173
+
+The dev server proxies `/api` to the backend at `http://127.0.0.1:8000`, so make
+sure the API (above) is running. Then upload an image (a description is optional)
+and click **Run Analysis**.
+
+> No backend running? Click **Load sample result** in the header to preview the
+> interface with mock data — no API key required.
+
+### 3) Production build (optional)
+```bash
+npm run build
+npm run preview
+```

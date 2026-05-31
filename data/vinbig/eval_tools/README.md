@@ -23,9 +23,15 @@ The evaluation script requires an active connection to the local API. Please ens
 ### 3. Python Dependencies
 It is highly recommended to run this script within a virtual environment. Activate your environment and install the required packages using pip:
 
+#### (Required)
+```bash
+python -m venv venv
+pip install requests python-dotenv
+```
+
+#### (Optional)
 ```bash
 source venv/bin/activate
-pip install requests python-dotenv
 ```
 
 ## Usage

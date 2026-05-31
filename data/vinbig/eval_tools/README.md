@@ -40,14 +40,14 @@ The evaluation pipeline is operated via the terminal. To prevent accidental API 
 **1. Smoke Test (5 Cases)**
 Ideal for verifying backend connectivity and pipeline logic without exhausting API credits.
 ```bash
-python run_evaluation.py -n 5
+python run_evaluation.py -n 5 | tee output.txt
 ```
 
 **2. Run the Full Evaluation (All 215 cases):**
 Use this command to process the entire dataset and generate the final performance metrics for the project.
 
 ```bash
-python run_evaluation.py --num_cases 215
+python run_evaluation.py --num_cases 215 | tee output.txt
 ```
 
 ## Evaluation Metrics

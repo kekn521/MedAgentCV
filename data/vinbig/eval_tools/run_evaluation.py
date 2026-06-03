@@ -170,7 +170,10 @@ def run_eval(num_cases):
     print("-"  *50)
     
     # 2. Calculate Macro Metrics
+    macro_precision_sum = 0
+    macro_recall_sum = 0
     macro_f1_sum = 0
+    
     for disease, metrics in class_metrics.items():
         c_tp = metrics['tp']
         c_fp = metrics['fp']
@@ -180,11 +183,17 @@ def run_eval(num_cases):
         c_recall = c_tp / (c_tp + c_fn) if (c_tp + c_fn) > 0 else 0
         c_f1 = 2 * (c_precision * c_recall) / (c_precision + c_recall) if (c_precision + c_recall) > 0 else 0
         
+        macro_precision_sum += c_precision
+        macro_recall_sum += c_recall
         macro_f1_sum += c_f1
         
+    macro_precision = macro_precision_sum / len(VALID_CLASSES)
+    macro_recall = macro_recall_sum / len(VALID_CLASSES)
     macro_f1 = macro_f1_sum / len(VALID_CLASSES)
     
     print("[ MACRO METRICS ] (Class-Balanced Performance)")
+    print(f"Precision : {macro_precision * 100:.2f}%")
+    print(f"Recall    : {macro_recall * 100:.2f}%")
     print(f"F1-Score  : {macro_f1 * 100:.2f}%")
     print("="*50)
 

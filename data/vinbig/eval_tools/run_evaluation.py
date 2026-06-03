@@ -12,24 +12,21 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # --- Configuration ---
 API_URL = "http://127.0.0.1:8000/api/v1/analyze"
 
-# Get the directory where this script is located (eval_tools)
+# Dynamic path resolution for project structure
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory (vinbig)
 PARENT_DIR = os.path.dirname(SCRIPT_DIR)
-
-# Dynamically set the path to dataset.json
 JSON_PATH = os.path.join(PARENT_DIR, "dataset.json")
+
+VALID_CLASSES = [
+    "Aortic enlargement", "Atelectasis", "Calcification", "Cardiomegaly", 
+    "Consolidation", "ILD", "Infiltration", "Lung Opacity", "Nodule/Mass", 
+    "Other lesion", "Pleural effusion", "Pleural thickening", 
+    "Pneumothorax", "Pulmonary fibrosis"
+]
 
 # --- AI Judge Function ---
 def llm_judge(ai_report):
     """Ask GPT to read the report and extract the definitively diagnosed disease list."""
-    
-    VALID_CLASSES = [
-        "Aortic enlargement", "Atelectasis", "Calcification", "Cardiomegaly", 
-        "Consolidation", "ILD", "Infiltration", "Lung Opacity", "Nodule/Mass", 
-        "Other lesion", "Pleural effusion", "Pleural thickening", 
-        "Pneumothorax", "Pulmonary fibrosis"
-    ]
     
     judge_prompt = f"""
     You are a strict, highly accurate medical AI evaluation judge.
@@ -70,7 +67,7 @@ def llm_judge(ai_report):
         if resp.status_code == 200:
             result_text = resp.json()["choices"][0]["message"]["content"]
             result_dict = json.loads(result_text)
-            print(f"   [ JUDGER ][ REASONING ] Judge's reasoning: {result_dict.get('reasoning', 'None')}")
+            print(f"   [ REASONING ] Judge's reasoning: {result_dict.get('reasoning', 'None')}")
             return result_dict.get("diagnosed_diseases", [])
         else:
             print(f"[ WARNING ] Judge AI connection error: {resp.text}")
@@ -86,21 +83,23 @@ def run_eval(num_cases):
     with open(JSON_PATH, 'r', encoding='utf-8') as f:
         dataset = json.load(f)
     
-    # Safety check: cap the limit to the total number of cases in the dataset
     limit = min(num_cases, len(dataset))
     test_cases = dataset[:limit]
     
+    # Global scoreboards for Micro metrics
     global_tp = 0
     global_fp = 0
     global_fn = 0
     
+    # Class-specific scoreboards for Macro metrics
+    class_metrics = {disease: {'tp': 0, 'fp': 0, 'fn': 0} for disease in VALID_CLASSES}
+    
     for i, case in enumerate(test_cases, 1):
-        # Prepend the parent directory to the image path found in JSON
         raw_img_path = case['image_path']
         img_path = os.path.join(PARENT_DIR, raw_img_path)
         
         clinical_note = case['clinical_note']
-        true_labels = case['image_labels']
+        true_labels = case['image_labels'] 
         
         print(f"\n--- Test Case {i}/{limit} ---")
         print(f"[ PATH ] Image Path: {img_path}")
@@ -125,20 +124,25 @@ def run_eval(num_cases):
                     print("[ SYSTEM ] Calling AI Judge for scoring...")
                     predicted_labels = llm_judge(ai_analysis)
                     
-                    # Formatted with exactly 3 spaces at the front
-                    print(f"   [ JUDGER ][ RESULT ] AI Diagnosed Result: {predicted_labels}")
+                    print(f"   [ RESULT ] AI Diagnosed Result: {predicted_labels}")
                     
                     true_set = set(true_labels)
                     pred_set = set(predicted_labels)
                     
-                    tp = len(true_set & pred_set) 
-                    fp = len(pred_set - true_set)  
-                    fn = len(true_set - pred_set) 
+                    # 1. Update Micro metrics (Global pool)
+                    global_tp += len(true_set & pred_set) 
+                    global_fp += len(pred_set - true_set)  
+                    global_fn += len(true_set - pred_set) 
                     
-                    global_tp += tp
-                    global_fp += fp
-                    global_fn += fn
-                    
+                    # 2. Update Macro metrics (Class-specific pool)
+                    for disease in VALID_CLASSES:
+                        if disease in true_set and disease in pred_set:
+                            class_metrics[disease]['tp'] += 1
+                        elif disease in pred_set and disease not in true_set:
+                            class_metrics[disease]['fp'] += 1
+                        elif disease in true_set and disease not in pred_set:
+                            class_metrics[disease]['fn'] += 1
+                            
                 else:
                     print(f"[ WARNING ] API Error: Status code {response.status_code}")
                     
@@ -154,22 +158,50 @@ def run_eval(num_cases):
     print(f"Total False Negatives (FN) : {global_fn}")
     print("-"  *50)
     
-    precision = global_tp / (global_tp + global_fp) if (global_tp + global_fp) > 0 else 0
-    recall = global_tp / (global_tp + global_fn) if (global_tp + global_fn) > 0 else 0
-    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    # 1. Calculate Micro Metrics
+    micro_precision = global_tp / (global_tp + global_fp) if (global_tp + global_fp) > 0 else 0
+    micro_recall = global_tp / (global_tp + global_fn) if (global_tp + global_fn) > 0 else 0
+    micro_f1 = 2 * (micro_precision * micro_recall) / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
     
-    print(f"[ METRIC ] Precision : {precision * 100:.2f}%")
-    print(f"[ METRIC ] Recall    : {recall * 100:.2f}%")
-    print(f"[ METRIC ] F1-Score  : {f1_score * 100:.2f}%")
+    print("[ MICRO METRICS ] (Overall Performance)")
+    print(f"Precision : {micro_precision * 100:.2f}%")
+    print(f"Recall    : {micro_recall * 100:.2f}%")
+    print(f"F1-Score  : {micro_f1 * 100:.2f}%")
+    print("-"  *50)
+    
+    # 2. Calculate Macro Metrics
+    macro_precision_sum = 0
+    macro_recall_sum = 0
+    macro_f1_sum = 0
+    
+    for disease, metrics in class_metrics.items():
+        c_tp = metrics['tp']
+        c_fp = metrics['fp']
+        c_fn = metrics['fn']
+        
+        c_precision = c_tp / (c_tp + c_fp) if (c_tp + c_fp) > 0 else 0
+        c_recall = c_tp / (c_tp + c_fn) if (c_tp + c_fn) > 0 else 0
+        c_f1 = 2 * (c_precision * c_recall) / (c_precision + c_recall) if (c_precision + c_recall) > 0 else 0
+        
+        macro_precision_sum += c_precision
+        macro_recall_sum += c_recall
+        macro_f1_sum += c_f1
+        
+    macro_precision = macro_precision_sum / len(VALID_CLASSES)
+    macro_recall = macro_recall_sum / len(VALID_CLASSES)
+    macro_f1 = macro_f1_sum / len(VALID_CLASSES)
+    
+    print("[ MACRO METRICS ] (Class-Balanced Performance)")
+    print(f"Precision : {macro_precision * 100:.2f}%")
+    print(f"Recall    : {macro_recall * 100:.2f}%")
+    print(f"F1-Score  : {macro_f1 * 100:.2f}%")
     print("="*50)
 
 if __name__ == "__main__":
-    # Configure argparse to handle command-line arguments
     parser = argparse.ArgumentParser(
         description="MedAgentCV Automated Evaluation Script. Requires the number of test cases to run."
     )
     
-    # required=True ensures the script stops and shows help if the argument is missing
     parser.add_argument(
         "-n", "--num_cases", 
         type=int, 
@@ -177,8 +209,5 @@ if __name__ == "__main__":
         help="Specify the number of test cases to evaluate (e.g., -n 5 or --num_cases 215)"
     )
     
-    # Parse arguments
     args = parser.parse_args()
-    
-    # Run main function with the specified number of cases
     run_eval(args.num_cases)

@@ -45,10 +45,45 @@ docker build -t medagentcv .
 docker run --env-file .env -p 8000:8000 medagentcv
 ```
 
-### 3) Docker Compose (optional)
+### 3) Docker Compose (backend + frontend)
+This repository supports two Compose profiles:
+
+- `dev`: FastAPI backend + Vite dev server (hot reload)
+- `prod`: FastAPI backend + built frontend served by Nginx
+
+Development profile:
 ```bash
-docker compose up --build
+docker compose --profile dev up --build
 ```
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+
+Production-like profile:
+```bash
+docker compose --profile prod up --build
+```
+
+- Frontend: http://localhost:8080
+- Backend API: http://localhost:8000
+
+Stop either profile:
+```bash
+docker compose --profile dev down
+docker compose --profile prod down
+```
+
+If your machine has an NVIDIA GPU with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed, uncomment the `deploy.resources.reservations` sections in `docker-compose.yml` to enable GPU acceleration.
+
+### 4) Docker Compose (backend-only)
+If you want to spin up only the backend API service using Docker Compose (without the frontend), you can run:
+
+```bash
+docker compose --profile dev up backend-dev --build
+```
+
+Because all services are configured with specific profiles, running `docker compose up` without specifying a profile or service will start no services.
+
 
 ### API usage
 POST `/api/v1/analyze` (multipart/form-data):

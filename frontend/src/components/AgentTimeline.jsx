@@ -1,3 +1,5 @@
+import Markdown from "./Markdown.jsx";
+
 // messages is a flat alternating list: even index = analytic draft,
 // odd index = verify feedback. Pair them into rounds for display.
 function toRounds(messages) {
@@ -27,7 +29,7 @@ export default function AgentTimeline({ messages }) {
               {r.analytic && (
                 <div className="turn turn-analytic">
                   <span className="turn-role">ANALYTIC</span>
-                  <p>{r.analytic}</p>
+                  <Markdown>{r.analytic}</Markdown>
                 </div>
               )}
               {r.verify && (
@@ -39,7 +41,7 @@ export default function AgentTimeline({ messages }) {
                   }`}
                 >
                   <span className="turn-role">VERIFY</span>
-                  <p>{r.verify}</p>
+                  <Markdown>{r.verify}</Markdown>
                 </div>
               )}
             </li>
@@ -49,3 +51,4 @@ export default function AgentTimeline({ messages }) {
     </div>
   );
 }
+

@@ -3,7 +3,7 @@
 ## Overview
 This component provides an automated evaluation pipeline for the MedAgentCV project. It leverages an LLM-as-a-Judge architecture (powered by GPT-4o-mini) to evaluate the diagnostic accuracy of the medical AI agent against the VinBigData chest X-ray dataset. 
 
-Instead of relying on rigid string matching or simple accuracy metrics, this pipeline extracts definitive imaging-backed diagnoses using a constrained vocabulary (Ontology Mapping) and calculates Precision, Recall, and F1-Score. This ensures the evaluation penalizes hallucinations (over-diagnosing based on patient descriptions) and accurately reflects clinical reliability.
+Instead of relying on rigid string matching or simple accuracy metrics, this pipeline extracts definitive imaging-backed diagnoses using a constrained vocabulary (Ontology Mapping). It incorporates a robust checkpointing system to prevent data loss during API interruptions and calculates both Micro and Macro metrics (Precision, Recall, and F1-Score) to accurately reflect clinical reliability across both common and rare diseases.
 
 ## Prerequisites
 
@@ -23,43 +23,74 @@ The evaluation script requires an active connection to the local API. Please ens
 ### 3. Python Dependencies
 It is highly recommended to run this script within a virtual environment. Activate your environment and install the required packages using pip:
 
-#### (Required)
+#### (Required for the first time running)
 ```bash
 python -m venv venv
 pip install requests python-dotenv
 ```
 
-#### (Optional)
+#### (Required for every time running)
 ```bash
 source venv/bin/activate
 ```
 
+
+## Output System & Logging
+
+The script features a built-in `DualLogger` and state manager, eliminating the need for manual shell redirection (e.g., `| tee`). Upon execution, an `output/` directory is automatically generated alongside the script to securely store all artifacts.
+
+The following files are autonomously created and updated during runtime:
+* `output/evaluation_log.txt`: A complete, real-time persistent mirror of your terminal output.
+* `output/evaluation_checkpoint.json`: A continuous save-state of successful evaluations, enabling seamless resumption if the process is interrupted.
+
 ## Usage
 
-The evaluation pipeline is operated via the terminal. To prevent accidental API consumption, you must explicitly define the number of test cases to process.
+The evaluation pipeline is operated via the terminal. To prevent accidental API credit exhaustion, the script enforces strict start and end boundaries.
 
-### Arguments
-* `-n`, `--num_cases` **(Required)**: An integer defining how many items from the dataset to evaluate.
+### Command Line Arguments
+You must select exactly one starting method (`--start` or `--resume`) and pair it with the required `--end` limit.
 
-### Examples
+* `--start <int>`: Defines the starting case number (using a 1-based index).
+* `--resume`: Automatically detects the last completed case from the checkpoint file and resumes execution from the next case.
+* `--end <int>` **(Required)**: Defines the final case number to process. *Note: The dataset contains a maximum of 215 cases.*
 
-**1. Smoke Test (5 Cases)**
-Ideal for verifying backend connectivity and pipeline logic without exhausting API credits.
+### Execution Examples
+
+**1. Smoke Test (First 5 Cases)**
+Ideal for verifying your backend connection and pipeline logic without draining API credits.
 ```bash
-python run_evaluation.py -n 5 | tee output.txt
+python run_evaluation.py --start 1 --end 5
 ```
 
-**2. Run the Full Evaluation (All 215 cases):**
-Use this command to process the entire dataset and generate the final performance metrics for the project.
+**2. Safe Resumption**
+If your API connection drops or you manually interrupt the script, use this command to automatically pick up exactly where the last save-state left off.
 
 ```bash
-python run_evaluation.py --num_cases 215 | tee output.txt
+python run_evaluation.py --resume --end 100
+```
+
+
+**3. Full Evaluation**
+Run the complete dataset from start to finish to calculate your definitive project metrics.
+
+```bash
+python run_evaluation.py --start 1 --end 215
 ```
 
 ## Evaluation Metrics
 
-Upon execution, the script outputs a terminal dashboard detailing the agent's performance. These metrics are specifically selected to evaluate imbalanced medical datasets:
+Upon completion or manual interruption, the script outputs a comprehensive performance dashboard. These metrics are specifically chosen to handle the heavy class imbalances typical in medical datasets.
 
-* **Precision**: The ratio of accurate diagnoses to total predicted diagnoses. High precision indicates the agent effectively avoids false positives and hallucinations (i.e., it does not diagnose a condition based solely on patient claims without imaging proof).
-* **Recall**: The ratio of accurate diagnoses to the actual ground truth. High recall signifies that the agent successfully detects critical findings and minimizes missed diagnoses (false negatives).
-* **F1-Score**: The harmonic mean of Precision and Recall. This acts as the primary benchmark for the agent's overall diagnostic reliability and clinical safety.
+**Micro Metrics (Overall System Performance)**
+Calculated globally across all predictions to reflect the agent's total diagnostic success rate.
+* **Micro Precision**: The ratio of correct diagnoses to the total number of predicted diagnoses. A high score indicates the agent effectively avoids false positives and prevents AI hallucinations.
+* **Micro Recall**: The ratio of correct diagnoses to the actual ground truth. A high score signifies that the agent reliably detects true findings and minimizes missed diagnoses (false negatives).
+* **Micro F1-Score**: The harmonic mean of Micro Precision and Micro Recall.
+
+**Macro Metrics (Class-Balanced Performance)**
+Calculated independently for each of the 14 valid disease classes and then averaged.
+**Macro Metrics (Class-Balanced Performance)**
+Calculated independently for each of the 14 valid disease classes and then averaged. This ensures that every condition is weighted equally, regardless of its prevalence in the dataset.
+* **Macro Precision**: Measures the model's average exactness across all disease types. A high score means the agent effectively avoids false positives even when evaluating highly rare conditions.
+* **Macro Recall**: Measures the model's average sensitivity across all disease types. A high score signifies that the agent successfully detects rare diseases just as well as common ones.
+* **Macro F1-Score**: The harmonic mean of Macro Precision and Macro Recall. A strong Macro F1 proves the model is comprehensively robust across the entire clinical spectrum and does not ignore rare anomalies.

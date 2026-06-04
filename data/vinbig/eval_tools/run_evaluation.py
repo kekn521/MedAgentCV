@@ -3,6 +3,7 @@ import requests
 import os
 import argparse
 import sys
+import traceback
 from dotenv import load_dotenv
 
 # Load OpenAI API Key from environment variables
@@ -11,11 +12,20 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # --- Configuration ---
 API_URL = "http://127.0.0.1:8000/api/v1/analyze"
+MAX_CASES = 215
 
-# Dynamic path resolution for project structure
+# Dynamic path resolution
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(SCRIPT_DIR)
 JSON_PATH = os.path.join(PARENT_DIR, "dataset.json")
+
+# Create a dedicated output directory for all generated files
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# File paths for logging and checkpointing
+LOG_FILE = os.path.join(OUTPUT_DIR, "evaluation_log.txt")
+CHECKPOINT_FILE = os.path.join(OUTPUT_DIR, "evaluation_checkpoint.json")
 
 VALID_CLASSES = [
     "Aortic enlargement", "Atelectasis", "Calcification", "Cardiomegaly", 
@@ -23,6 +33,25 @@ VALID_CLASSES = [
     "Other lesion", "Pleural effusion", "Pleural thickening", 
     "Pneumothorax", "Pulmonary fibrosis"
 ]
+
+# --- Custom Logger for Real-time File Output ---
+class DualLogger:
+    """Writes standard output simultaneously to the terminal and a log file."""
+    def __init__(self, filepath):
+        self.terminal = sys.stdout
+        self.log = open(filepath, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()  # Force immediate write to disk
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+# Redirect stdout to the DualLogger
+sys.stdout = DualLogger(LOG_FILE)
 
 # --- AI Judge Function ---
 def llm_judge(ai_report):
@@ -71,94 +100,68 @@ def llm_judge(ai_report):
             return result_dict.get("diagnosed_diseases", [])
         else:
             print(f"[ WARNING ] Judge AI connection error: {resp.text}")
-            return []
+            return None
     except Exception as e:
         print(f"[ ERROR ] Judge AI exception error: {e}")
-        return []
+        return None
 
-# --- Main Program ---
-def run_eval(num_cases):
-    print(f"[ START ] Starting MedAgentCV Automated Evaluation Test for {num_cases} cases...\n")
-    
-    with open(JSON_PATH, 'r', encoding='utf-8') as f:
-        dataset = json.load(f)
-    
-    limit = min(num_cases, len(dataset))
-    test_cases = dataset[:limit]
-    
-    # Global scoreboards for Micro metrics
+def load_checkpoint():
+    """Load previously saved predictions from JSON."""
+    if os.path.exists(CHECKPOINT_FILE):
+        with open(CHECKPOINT_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def save_checkpoint(data):
+    """Save predictions to JSON instantly."""
+    with open(CHECKPOINT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
+
+def calculate_and_print_metrics(dataset, checkpoint_data):
+    """Calculates final Micro and Macro metrics based on ALL saved checkpoints."""
+    if not checkpoint_data:
+        print("\n[ INFO ] No evaluation data available to calculate metrics.")
+        return
+
     global_tp = 0
     global_fp = 0
     global_fn = 0
-    
-    # Class-specific scoreboards for Macro metrics
     class_metrics = {disease: {'tp': 0, 'fp': 0, 'fn': 0} for disease in VALID_CLASSES}
-    
-    for i, case in enumerate(test_cases, 1):
-        raw_img_path = case['image_path']
-        img_path = os.path.join(PARENT_DIR, raw_img_path)
+
+    evaluated_cases = 0
+
+    for i_str, predicted_labels in checkpoint_data.items():
+        case_idx = int(i_str) - 1 
         
-        clinical_note = case['clinical_note']
-        true_labels = case['image_labels'] 
-        
-        print(f"\n--- Test Case {i}/{limit} ---")
-        print(f"[ PATH ] Image Path: {img_path}")
-        print(f"[ TARGET ] Ground Truth: {true_labels}")
-        
-        if not os.path.exists(img_path):
-            print(f"[ ERROR ] Image not found {img_path}\n")
+        if case_idx >= len(dataset):
             continue
             
-        try:
-            with open(img_path, 'rb') as img_file:
-                files = {'image': img_file}
-                data = {'disease_description': clinical_note}
+        true_labels = dataset[case_idx]['image_labels']
+        true_set = set(true_labels)
+        pred_set = set(predicted_labels)
+        
+        global_tp += len(true_set & pred_set) 
+        global_fp += len(pred_set - true_set)  
+        global_fn += len(true_set - pred_set) 
+        
+        for disease in VALID_CLASSES:
+            if disease in true_set and disease in pred_set:
+                class_metrics[disease]['tp'] += 1
+            elif disease in pred_set and disease not in true_set:
+                class_metrics[disease]['fp'] += 1
+            elif disease in true_set and disease not in pred_set:
+                class_metrics[disease]['fn'] += 1
                 
-                print("[ PENDING ] Waiting for MedAgentCV analysis...")
-                response = requests.post(API_URL, files=files, data=data)
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_analysis = result.get('final_analysis', '')
-                    
-                    print("[ SYSTEM ] Calling AI Judge for scoring...")
-                    predicted_labels = llm_judge(ai_analysis)
-                    
-                    print(f"   [ RESULT ] AI Diagnosed Result: {predicted_labels}")
-                    
-                    true_set = set(true_labels)
-                    pred_set = set(predicted_labels)
-                    
-                    # 1. Update Micro metrics (Global pool)
-                    global_tp += len(true_set & pred_set) 
-                    global_fp += len(pred_set - true_set)  
-                    global_fn += len(true_set - pred_set) 
-                    
-                    # 2. Update Macro metrics (Class-specific pool)
-                    for disease in VALID_CLASSES:
-                        if disease in true_set and disease in pred_set:
-                            class_metrics[disease]['tp'] += 1
-                        elif disease in pred_set and disease not in true_set:
-                            class_metrics[disease]['fp'] += 1
-                        elif disease in true_set and disease not in pred_set:
-                            class_metrics[disease]['fn'] += 1
-                            
-                else:
-                    print(f"[ WARNING ] API Error: Status code {response.status_code}")
-                    
-        except Exception as e:
-            print(f"[ CRITICAL ] Unexpected error occurred: {e}\n")
+        evaluated_cases += 1
 
-    # --- Metrics Calculation ---
     print("\n" + "="*50)
-    print("[ REPORT ] MedAgentCV Final Evaluation Report")
+    print(f"[ REPORT ] Final Evaluation Report (Total Cases: {evaluated_cases})")
     print("="*50)
     print(f"Total True Positives (TP)  : {global_tp}")
     print(f"Total False Positives (FP) : {global_fp}")
     print(f"Total False Negatives (FN) : {global_fn}")
     print("-"  *50)
     
-    # 1. Calculate Micro Metrics
     micro_precision = global_tp / (global_tp + global_fp) if (global_tp + global_fp) > 0 else 0
     micro_recall = global_tp / (global_tp + global_fn) if (global_tp + global_fn) > 0 else 0
     micro_f1 = 2 * (micro_precision * micro_recall) / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
@@ -169,7 +172,6 @@ def run_eval(num_cases):
     print(f"F1-Score  : {micro_f1 * 100:.2f}%")
     print("-"  *50)
     
-    # 2. Calculate Macro Metrics
     macro_precision_sum = 0
     macro_recall_sum = 0
     macro_f1_sum = 0
@@ -197,17 +199,129 @@ def run_eval(num_cases):
     print(f"F1-Score  : {macro_f1 * 100:.2f}%")
     print("="*50)
 
+
+# --- Main Program ---
+def run_eval(start_idx, end_idx):
+    with open(JSON_PATH, 'r', encoding='utf-8') as f:
+        dataset = json.load(f)
+    
+    # Cap the end_idx to either the explicit MAX_CASES limit or the actual dataset length
+    total_cases = len(dataset)
+    actual_limit = min(MAX_CASES, total_cases)
+    
+    if end_idx > actual_limit:
+        print(f"[ INFO ] Requested end case {end_idx} exceeds maximum allowed. Capping at {actual_limit}.")
+        
+    end_idx = min(end_idx, actual_limit)
+    start_idx = max(1, start_idx) if start_idx else 1
+    
+    checkpoint_data = load_checkpoint()
+    
+    print(f"\n[ START ] Resuming MedAgentCV Evaluation from Case {start_idx} to {end_idx}...")
+    print(f"[ INFO ] Output is being actively recorded to {LOG_FILE}\n")
+    
+    try:
+        for i in range(start_idx, end_idx + 1):
+            case_id = str(i)
+            case = dataset[i - 1] 
+            
+            raw_img_path = case['image_path']
+            img_path = os.path.join(PARENT_DIR, raw_img_path)
+            clinical_note = case['clinical_note']
+            true_labels = case['image_labels'] 
+            
+            print(f"\n--- Test Case {i}/{actual_limit} ---")
+            print(f"[ PATH ] Image Path: {img_path}")
+            print(f"[ TARGET ] Ground Truth: {true_labels}")
+            
+            if not os.path.exists(img_path):
+                print(f"[ ERROR ] Image not found {img_path}\n")
+                continue
+                
+            try:
+                with open(img_path, 'rb') as img_file:
+                    files = {'image': img_file}
+                    data = {'disease_description': clinical_note}
+                    
+                    print("[ PENDING ] Waiting for MedAgentCV analysis...")
+                    response = requests.post(API_URL, files=files, data=data)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        ai_analysis = result.get('final_analysis', '')
+                        
+                        print("[ SYSTEM ] Calling AI Judge for scoring...")
+                        predicted_labels = llm_judge(ai_analysis)
+                        
+                        if predicted_labels is not None:
+                            print(f"   [ RESULT ] AI Diagnosed Result: {predicted_labels}")
+                            
+                            checkpoint_data[case_id] = predicted_labels
+                            save_checkpoint(checkpoint_data)
+                        else:
+                            print("[ ERROR ] Skipping save due to AI Judge failure.")
+                            
+                    else:
+                        print(f"[ WARNING ] API Error: Status code {response.status_code}")
+                        
+            except Exception as e:
+                print(f"[ CRITICAL ] Unexpected error occurred on Case {i}: {e}")
+                
+    except KeyboardInterrupt:
+        print("\n[ WARNING ] Execution interrupted by user (Ctrl+C).")
+    except Exception as err:
+        print(f"\n[ FATAL ] Script crashed: {err}")
+        traceback.print_exc()
+    
+    calculate_and_print_metrics(dataset, checkpoint_data)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="MedAgentCV Automated Evaluation Script. Requires the number of test cases to run."
+        description="MedAgentCV Automated Evaluation Script. Requires strict start/resume and end boundaries."
     )
     
-    parser.add_argument(
-        "-n", "--num_cases", 
+    # Create a mutually exclusive group: User MUST provide exactly ONE of these two
+    start_group = parser.add_mutually_exclusive_group(required=True)
+    start_group.add_argument(
+        "--start", 
         type=int, 
-        required=True, 
-        help="Specify the number of test cases to evaluate (e.g., -n 5 or --num_cases 215)"
+        help="Specify the starting case number (1-based index)."
+    )
+    start_group.add_argument(
+        "--resume",
+        action="store_true",
+        help="Automatically find the last completed case and resume from the next one."
+    )
+    
+    # --end is always required independently of the group above
+    parser.add_argument(
+        "--end", 
+        type=int, 
+        required=True,
+        help=f"Specify the ending case number (1-based index). Maximum allowed is {MAX_CASES}."
     )
     
     args = parser.parse_args()
-    run_eval(args.num_cases)
+    
+    end_case = args.end
+    
+    # Determine the starting case based on user choice
+    if args.resume:
+        checkpoint = load_checkpoint()
+        if checkpoint:
+            highest_case = max([int(k) for k in checkpoint.keys()])
+            start_case = highest_case + 1
+            print(f"[ SYSTEM ] Found checkpoint. Auto-resuming from Case {start_case}.")
+        else:
+            print("[ SYSTEM ] No previous checkpoint found. Starting from Case 1.")
+            start_case = 1
+    else:
+        start_case = args.start
+        
+    # Final logical validation
+    if start_case > end_case:
+        print(f"\n[ ERROR ] Logic Conflict: Start case ({start_case}) cannot be greater than End case ({end_case}).")
+        print("          If you are using --resume, check if you have already completed the target end limit.\n")
+        sys.exit(1)
+            
+    run_eval(start_case, end_case)

@@ -94,3 +94,11 @@ Calculated independently for each of the 14 valid disease classes and then avera
 * **Macro Precision**: Measures the model's average exactness across all disease types. A high score means the agent effectively avoids false positives even when evaluating highly rare conditions.
 * **Macro Recall**: Measures the model's average sensitivity across all disease types. A high score signifies that the agent successfully detects rare diseases just as well as common ones.
 * **Macro F1-Score**: The harmonic mean of Macro Precision and Macro Recall. A strong Macro F1 proves the model is comprehensively robust across the entire clinical spectrum and does not ignore rare anomalies.
+
+
+
+
+
+
+
+
